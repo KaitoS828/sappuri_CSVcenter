@@ -1,18 +1,22 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Upload, Download, Loader2, FileText, Edit, Trash2, X, Check, Save, HelpCircle, Keyboard, Info, Wand2, Clock } from "lucide-react";
+import { Upload, Download, Loader2, FileText, Edit, Trash2, X, Check, Save, HelpCircle, Keyboard, Info, Wand2, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import * as XLSX from 'xlsx';
 
 interface ExtractedData {
+
     name: string;
     furigana: string;
     gender: string;
-    dob: string;
+    dobYear: string;
+    dobMonth: string;
+    dobDay: string;
     postalCode: string;
     address: string;
     phone: string;
     occupation: string;
+    cardNumber: string;
     _sourceUrl?: string;
     _sourceType?: string;
 }
@@ -28,6 +32,11 @@ export default function Home() {
     // Editing State
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editFormData, setEditFormData] = useState<ExtractedData | null>(null);
+
+    // Sorting State
+    const [sortConfig, setSortConfig] = useState<{ key: keyof ExtractedData; direction: 'asc' | 'desc' } | null>(null);
+
+
 
     // Help Modal State
     const [showHelp, setShowHelp] = useState(false);
@@ -64,6 +73,18 @@ export default function Home() {
             if (e.key === 'Escape') {
                 e.preventDefault();
                 handleCancelClick();
+            }
+
+            // Navigation Shortcuts (Alt/Option + Up/Down or Left/Right)
+            if (e.altKey) {
+                if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    handleNavigate('prev');
+                }
+                if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    handleNavigate('next'); fg
+                }
             }
         };
 
@@ -135,23 +156,23 @@ export default function Home() {
             phone = item.phone; // keep original if length mismatch
         }
 
-        // 2. Date Normalization (YYYY-MM-DD, YYYY.MM.DD -> YYYY/MM/DD)
-        let dob = item.dob.replace(/[-.]/g, "/");
-
-        return { ...item, phone, dob };
+        return { ...item, phone };
     };
 
     const downloadCSV = () => {
         if (data.length === 0) return;
 
-        const headers = ["Name", "Furigana", "Gender", "DOB", "Postal Code", "Address", "Phone", "Occupation"];
+        const headers = ["Card No", "Name", "Furigana", "Gender", "DOB Year", "DOB Month", "DOB Day", "Postal Code", "Address", "Phone", "Occupation"];
         const csvContent = [
             headers.join(","),
             ...data.map(row => [
+                `"${row.cardNumber || ''}"`,
                 `"${row.name}"`,
                 `"${row.furigana}"`,
                 `"${row.gender}"`,
-                `"${row.dob}"`,
+                `"${row.dobYear}"`,
+                `"${row.dobMonth}"`,
+                `"${row.dobDay}"`,
                 `"${row.postalCode}"`,
                 `"${row.address}"`,
                 `"${row.phone}"`,
@@ -212,6 +233,27 @@ export default function Home() {
         setEditFormData(null);
     };
 
+    const handleNavigate = (direction: 'prev' | 'next') => {
+        if (editingIndex === null || !editFormData) return;
+
+        // 1. Auto-Save Current
+        const normalized = normalizeData(editFormData);
+        const newData = [...data];
+        newData[editingIndex] = normalized;
+
+        // 2. Calculate New Index
+        let newIndex = direction === 'next' ? editingIndex + 1 : editingIndex - 1;
+
+        // Loop or Stop? Let's stop at edges.
+        if (newIndex < 0) return; // or newIndex = data.length - 1 (loop)
+        if (newIndex >= data.length) return; // or newIndex = 0 (loop)
+
+        // 3. Update State
+        setData(newData); // Commit save
+        setEditingIndex(newIndex);
+        setEditFormData({ ...newData[newIndex] }); // Load next
+    };
+
     const handleDeleteClick = (index: number) => {
         if (confirm("この行を削除しますか？")) {
             const newData = [...data];
@@ -219,6 +261,26 @@ export default function Home() {
             setData(newData);
         }
     }
+
+    const handleSort = (key: keyof ExtractedData) => {
+        let direction: 'asc' | 'desc' = 'asc';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const sortedData = [...data].sort((a, b) => {
+        if (!sortConfig) return 0;
+
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+
+        if (aValue === undefined || bValue === undefined) return 0;
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, field: keyof ExtractedData) => {
         if (!editFormData) return;
@@ -368,14 +430,33 @@ export default function Home() {
                                     <h3 className="font-bold text-lg flex items-center gap-2">
                                         <Edit className="w-5 h-5" /> Edit Data
                                     </h3>
-                                    <p className="text-xs text-gray-400 mt-1">
-                                        <kbd className="font-mono bg-gray-100 px-1 rounded">Ctrl+Enter</kbd> to Save,
-                                        <kbd className="font-mono bg-gray-100 px-1 rounded ml-1">Esc</kbd> to Cancel
-                                    </p>
                                 </div>
-                                <button onClick={handleCancelClick} className="text-gray-400 hover:text-gray-600">
-                                    <X className="w-6 h-6" />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <div className="flex items-center bg-gray-100 rounded-lg p-1 mr-4">
+                                        <button
+                                            onClick={() => handleNavigate('prev')}
+                                            disabled={editingIndex === 0}
+                                            className="p-1 text-gray-600 hover:text-blue-600 hover:bg-white rounded disabled:opacity-30 disabled:hover:bg-transparent"
+                                            title="Previous (Alt + ↑)"
+                                        >
+                                            <ChevronLeft className="w-5 h-5" />
+                                        </button>
+                                        <span className="text-xs font-mono text-gray-500 px-2 min-w-[60px] text-center">
+                                            {editingIndex! + 1} / {data.length}
+                                        </span>
+                                        <button
+                                            onClick={() => handleNavigate('next')}
+                                            disabled={editingIndex === data.length - 1}
+                                            className="p-1 text-gray-600 hover:text-blue-600 hover:bg-white rounded disabled:opacity-30 disabled:hover:bg-transparent"
+                                            title="Next (Alt + ↓)"
+                                        >
+                                            <ChevronRight className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                    <button onClick={handleCancelClick} className="text-gray-400 hover:text-gray-600">
+                                        <X className="w-6 h-6" />
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-8 space-y-6">
@@ -408,14 +489,28 @@ export default function Home() {
                                             placeholder="Gender"
                                         />
                                     </div>
-                                    <div className="space-y-2">
+                                    <div className="space-y-2 col-span-2">
                                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Date of Birth</label>
-                                        <input
-                                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                                            value={editFormData.dob}
-                                            onChange={(e) => handleInputChange(e, 'dob')}
-                                            placeholder="YYYY/MM/DD"
-                                        />
+                                        <div className="flex gap-2">
+                                            <input
+                                                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                value={editFormData.dobYear}
+                                                onChange={(e) => handleInputChange(e, 'dobYear')}
+                                                placeholder="Year"
+                                            />
+                                            <input
+                                                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                value={editFormData.dobMonth}
+                                                onChange={(e) => handleInputChange(e, 'dobMonth')}
+                                                placeholder="Month"
+                                            />
+                                            <input
+                                                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                value={editFormData.dobDay}
+                                                onChange={(e) => handleInputChange(e, 'dobDay')}
+                                                placeholder="Day"
+                                            />
+                                        </div>
                                     </div>
                                     <div className="col-span-2 space-y-2">
                                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Address</label>
@@ -454,6 +549,15 @@ export default function Home() {
                                             placeholder="Occupation"
                                         />
                                     </div>
+                                    <div className="col-span-2 space-y-2">
+                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Card Number (8 digits)</label>
+                                        <input
+                                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                                            value={editFormData.cardNumber || ''}
+                                            onChange={(e) => handleInputChange(e, 'cardNumber')}
+                                            placeholder="12345678"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -474,7 +578,8 @@ export default function Home() {
                         </div>
                     </div>
                 </div>
-            )}
+            )
+            }
 
             <div className="max-w-7xl mx-auto space-y-12">
                 {/* Header */}
@@ -558,10 +663,15 @@ export default function Home() {
                                         <tr>
                                             <th className="p-4 font-semibold w-10">#</th>
                                             <th className="p-4 font-semibold w-32">ACTION</th>
-                                            <th className="p-4 font-semibold">NAME</th>
+                                            <th onClick={() => handleSort('cardNumber')} className="p-4 font-semibold cursor-pointer hover:bg-gray-100 transition-colors group">
+                                                CARD NO {sortConfig?.key === 'cardNumber' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+                                            </th>
+                                            <th onClick={() => handleSort('name')} className="p-4 font-semibold cursor-pointer hover:bg-gray-100 transition-colors">NAME {sortConfig?.key === 'name' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                                             <th className="p-4 font-semibold">FURIGANA</th>
                                             <th className="p-4 font-semibold">GENDER</th>
-                                            <th className="p-4 font-semibold">DOB</th>
+                                            <th className="p-4 font-semibold">YEAR</th>
+                                            <th className="p-4 font-semibold">MONTH</th>
+                                            <th className="p-4 font-semibold">DAY</th>
                                             <th className="p-4 font-semibold">POSTAL</th>
                                             <th className="p-4 font-semibold">ADDRESS</th>
                                             <th className="p-4 font-semibold">PHONE</th>
@@ -569,7 +679,7 @@ export default function Home() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
-                                        {data.map((row, i) => (
+                                        {sortedData.map((row, i) => (
                                             <tr key={i} className="hover:bg-blue-50/50 transition-colors">
                                                 <td className="p-4 text-gray-400 text-xs">{i + 1}</td>
                                                 <td className="p-4">
@@ -590,10 +700,13 @@ export default function Home() {
                                                         </button>
                                                     </div>
                                                 </td>
+                                                <td className="p-4 font-mono font-bold text-blue-600">{row.cardNumber || '-'}</td>
                                                 <td className="p-4 font-medium text-gray-900">{row.name}</td>
                                                 <td className="p-4 text-gray-600">{row.furigana}</td>
-                                                <td className="p-4 text-gray-600">{row.gender}</td>
-                                                <td className="p-4 text-gray-600">{row.dob}</td>
+                                                <td className="p-4 text-gray-600 font-mono text-center">{row.gender}</td>
+                                                <td className="p-4 text-gray-600 font-mono">{row.dobYear}</td>
+                                                <td className="p-4 text-gray-600 font-mono">{row.dobMonth}</td>
+                                                <td className="p-4 text-gray-600 font-mono">{row.dobDay}</td>
                                                 <td className={`p-4 ${!row.postalCode ? 'text-red-400 italic' : 'text-gray-600'}`}>
                                                     {row.postalCode || 'Missing'}
                                                 </td>
@@ -609,6 +722,6 @@ export default function Home() {
                     </div>
                 )}
             </div>
-        </main>
+        </main >
     );
 }

@@ -31,14 +31,16 @@ export async function POST(req: NextRequest) {
       Fields to extract per page:
       - name (Name of the person)
       - furigana (Reading of the name)
-      - gender (Gender)
-      - dob (Date of Birth)
+      - gender (1 for Male, 2 for Female, 0 for Unknown/Other)
+      - dobYear (Year of Birth, 4 digits)
+      - dobMonth (Month of Birth, 1-12)
+      - dobDay (Day of Birth, 1-31)
       - address (Full Address including prefecture, city, street, building)
       - postalCode (Postal Code - if missing, try to infer from address or leave blank)
       - phone (Phone Number)
       - occupation (Job/Occupation)
+      - cardNumber (8-digit number found on receipt, if attached)
       
-      Format the date of birth as YYYY-MM-DD if possible.
       Return ONLY the JSON ARRAY, no markdown formatting.
       If a field is not found or illegible, set it to an empty string.
       
@@ -47,12 +49,15 @@ export async function POST(req: NextRequest) {
         {
           "name": "...",
           "furigana": "...",
-          "gender": "...",
-          "dob": "...",
+          "gender": "1",
+          "dobYear": "1990",
+          "dobMonth": "1",
+          "dobDay": "1",
           "address": "...",
           "postalCode": "...",
           "phone": "...",
-          "occupation": "..."
+          "occupation": "...",
+          "cardNumber": "..."
         },
         {
           "name": "...",
@@ -102,6 +107,19 @@ export async function POST(req: NextRequest) {
             if (!Array.isArray(parsedData)) {
                 parsedData = [parsedData];
             }
+            parsedData = parsedData.map((item: any) => ({
+                name: item.name || "",
+                furigana: item.furigana || "",
+                gender: item.gender || "0",
+                dobYear: item.dobYear || "",
+                dobMonth: item.dobMonth || "",
+                dobDay: item.dobDay || "",
+                postalCode: item.postalCode || "",
+                address: item.address || "",
+                phone: item.phone || "",
+                occupation: item.occupation || "",
+                cardNumber: item.cardNumber || ""
+            }));
         } catch (e) {
             console.error("Failed to parse JSON:", responseText, e);
             return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
