@@ -263,16 +263,18 @@ export default function Home() {
     }
 
     const handleSort = (key: keyof ExtractedData) => {
-        let direction: 'asc' | 'desc' = 'asc';
-        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
+        if (sortConfig && sortConfig.key === key) {
+            if (sortConfig.direction === 'asc') {
+                setSortConfig({ key, direction: 'desc' });
+            } else {
+                setSortConfig(null); // Reset to original order
+            }
+        } else {
+            setSortConfig({ key, direction: 'asc' });
         }
-        setSortConfig({ key, direction });
     };
 
-    const sortedData = [...data].sort((a, b) => {
-        if (!sortConfig) return 0;
-
+    const sortedData = sortConfig ? [...data].sort((a, b) => {
         const aValue = a[sortConfig.key];
         const bValue = b[sortConfig.key];
 
@@ -280,7 +282,7 @@ export default function Home() {
         if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
-    });
+    }) : data;
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, field: keyof ExtractedData) => {
         if (!editFormData) return;

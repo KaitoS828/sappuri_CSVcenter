@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       
       Fields to extract per page:
       - name (Name of the person)
-      - furigana (Reading of the name)
+      - furigana (Reading of the name in KATAKANA)
       - gender (1 for Male, 2 for Female, 0 for Unknown/Other)
       - dobYear (Year of Birth, 4 digits)
       - dobMonth (Month of Birth, 1-12)
