@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+:root {
+  --foreground-rgb: 51, 51, 51;
+  /* Dark gray text */
+  --background-start-rgb: 253, 252, 248;
+  /* HIVE-like Beige */
+  --background-end-rgb: 253, 252, 248;
+  /* Solid beige */
+}
+
+/* Force light mode/beige theme */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground-rgb: 51, 51, 51;
+    --background-start-rgb: 253, 252, 248;
+    --background-end-rgb: 253, 252, 248;
+  }
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
+  min-height: 100vh;
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/10 backdrop-blur-lg border border-white/20 shadow-xl;
+  }
+}
