@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Upload, Download, Loader2, FileText, Edit, Trash2, X, Check, Save, HelpCircle, Keyboard, Info, Wand2, Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import { Upload, Download, Loader2, FileText, Edit, Trash2, X, Check, Save, HelpCircle, Keyboard, Info, Wand2, Clock, ChevronLeft, ChevronRight, Search, Moon, Sun, AlertTriangle } from "lucide-react";
 import * as XLSX from 'xlsx';
 
 interface ExtractedData {
@@ -38,9 +38,80 @@ export default function Home() {
 
 
 
+    // Sorted Data Calculation
+    const sortedData = sortConfig ? [...data].sort((a, b) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+
+        if (aValue === undefined || bValue === undefined) return 0;
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+    }) : data;
+
+
+
     // Help Modal State
     const [showHelp, setShowHelp] = useState(false);
     const [activeHelpTab, setActiveHelpTab] = useState<'guide' | 'shortcuts' | 'faq'>('guide');
+
+    // Search & Filter State
+    const [searchQuery, setSearchQuery] = useState("");
+
+    // Dark Mode State
+    const [isDarkMode, setIsDarkMode] = useState(false);
+
+
+    // Duplicate Detection Logic
+    const duplicateSet = new Set<string>();
+    const duplicates = new Set<string>();
+    if (data.length > 0) {
+        data.forEach(item => {
+            if (item.cardNumber) {
+                if (duplicateSet.has(item.cardNumber)) {
+                    duplicates.add(item.cardNumber);
+                }
+                duplicateSet.add(item.cardNumber);
+            }
+        });
+    }
+
+    // Initialize Dark Mode
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+            setIsDarkMode(true);
+            document.documentElement.classList.add('dark');
+        } else {
+            setIsDarkMode(false);
+            document.documentElement.classList.remove('dark');
+        }
+    }, []);
+
+    const toggleDarkMode = () => {
+        if (isDarkMode) {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+            setIsDarkMode(false);
+        } else {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+            setIsDarkMode(true);
+        }
+    };
+
+    // Filtered Data
+    const filteredData = sortedData.filter(item => {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return (
+            item.name.toLowerCase().includes(q) ||
+            item.furigana.includes(q) ||
+            (item.cardNumber || "").includes(q) ||
+            item.phone.includes(q)
+        );
+    });
 
     // Load from LocalStorage
     useEffect(() => {
@@ -75,16 +146,25 @@ export default function Home() {
                 handleCancelClick();
             }
 
-            // Navigation Shortcuts (Alt/Option + Up/Down or Left/Right)
-            if (e.altKey) {
-                if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-                    e.preventDefault();
-                    handleNavigate('prev');
-                }
-                if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-                    e.preventDefault();
-                    handleNavigate('next'); fg
-                }
+            // Navigation Shortcuts
+            // Prev: Alt + Up/Left, PageUp, Ctrl + Up/Left
+            if (
+                (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowLeft')) ||
+                e.key === 'PageUp' ||
+                (e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowLeft'))
+            ) {
+                e.preventDefault();
+                handleNavigate('prev');
+            }
+
+            // Next: Alt + Down/Right, PageDown, Ctrl + Down/Right
+            if (
+                (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowRight')) ||
+                e.key === 'PageDown' ||
+                (e.ctrlKey && (e.key === 'ArrowDown' || e.key === 'ArrowRight'))
+            ) {
+                e.preventDefault();
+                handleNavigate('next');
             }
         };
 
@@ -160,12 +240,12 @@ export default function Home() {
     };
 
     const downloadCSV = () => {
-        if (data.length === 0) return;
+        if (filteredData.length === 0) return;
 
         const headers = ["Card No", "Name", "Furigana", "Gender", "DOB Year", "DOB Month", "DOB Day", "Postal Code", "Address", "Phone", "Occupation"];
         const csvContent = [
             headers.join(","),
-            ...data.map(row => [
+            ...filteredData.map(row => [
                 `"${row.cardNumber || ''}"`,
                 `"${row.name}"`,
                 `"${row.furigana}"`,
@@ -194,8 +274,8 @@ export default function Home() {
     };
 
     const downloadExcel = () => {
-        if (data.length === 0) return;
-        const exportData = data.map(({ _sourceUrl, _sourceType, ...rest }) => rest);
+        if (filteredData.length === 0) return;
+        const exportData = filteredData.map(({ _sourceUrl, _sourceType, ...rest }) => rest);
         const worksheet = XLSX.utils.json_to_sheet(exportData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Applications");
@@ -274,15 +354,7 @@ export default function Home() {
         }
     };
 
-    const sortedData = sortConfig ? [...data].sort((a, b) => {
-        const aValue = a[sortConfig.key];
-        const bValue = b[sortConfig.key];
 
-        if (aValue === undefined || bValue === undefined) return 0;
-        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-    }) : data;
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, field: keyof ExtractedData) => {
         if (!editFormData) return;
@@ -301,79 +373,99 @@ export default function Home() {
 
     const HelpModal = () => (
         <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                    <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <div className="bg-white dark:bg-gray-900 w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-800">
+                <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800">
+                    <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
                         <HelpCircle className="w-6 h-6 text-blue-500" /> 使い方ガイド
                     </h2>
-                    <button onClick={() => setShowHelp(false)} className="text-gray-400 hover:text-gray-600">
+                    <button onClick={() => setShowHelp(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                         <X className="w-6 h-6" />
                     </button>
                 </div>
-                <div className="flex border-b border-gray-100">
-                    <button onClick={() => setActiveHelpTab('guide')} className={`flex-1 py-3 text-sm font-medium transition-colors ${activeHelpTab === 'guide' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'}`}>機能紹介</button>
-                    <button onClick={() => setActiveHelpTab('shortcuts')} className={`flex-1 py-3 text-sm font-medium transition-colors ${activeHelpTab === 'shortcuts' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'}`}>ショートカット</button>
-                    <button onClick={() => setActiveHelpTab('faq')} className={`flex-1 py-3 text-sm font-medium transition-colors ${activeHelpTab === 'faq' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'}`}>F.A.Q</button>
+                <div className="flex border-b border-gray-100 dark:border-gray-800">
+                    <button onClick={() => setActiveHelpTab('guide')} className={`flex-1 py-3 text-sm font-medium transition-colors ${activeHelpTab === 'guide' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-gray-800 dark:text-blue-400' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}>機能紹介</button>
+                    <button onClick={() => setActiveHelpTab('shortcuts')} className={`flex-1 py-3 text-sm font-medium transition-colors ${activeHelpTab === 'shortcuts' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-gray-800 dark:text-blue-400' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}>ショートカット</button>
+                    <button onClick={() => setActiveHelpTab('faq')} className={`flex-1 py-3 text-sm font-medium transition-colors ${activeHelpTab === 'faq' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-gray-800 dark:text-blue-400' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}>F.A.Q</button>
                 </div>
-                <div className="p-8 h-96 overflow-y-auto">
+                <div className="p-8 h-96 overflow-y-auto text-gray-700 dark:text-gray-300">
                     {activeHelpTab === 'guide' && (
                         <div className="space-y-6">
                             <div className="flex gap-4">
-                                <div className="p-3 bg-blue-100 text-blue-600 rounded-lg h-fit"><Upload className="w-6 h-6" /></div>
+                                <div className="p-3 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-lg h-fit"><Upload className="w-6 h-6" /></div>
                                 <div>
-                                    <h3 className="font-bold text-gray-800">1. ファイルをアップロード</h3>
-                                    <p className="text-sm text-gray-600 mt-1">PDF（複数ページ可）や画像をドラッグ＆ドロップ。一度に複数のファイルを投げ込めます。</p>
+                                    <h3 className="font-bold text-gray-800 dark:text-gray-100">1. ファイルをアップロード</h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">PDF（複数ページ可）や画像をドラッグ＆ドロップ。一度に複数のファイルを投げ込めます。</p>
                                 </div>
                             </div>
                             <div className="flex gap-4">
-                                <div className="p-3 bg-purple-100 text-purple-600 rounded-lg h-fit"><Edit className="w-6 h-6" /></div>
+                                <div className="p-3 bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 rounded-lg h-fit"><Edit className="w-6 h-6" /></div>
                                 <div>
-                                    <h3 className="font-bold text-gray-800">2. 比較しながら編集 (Split View)</h3>
-                                    <p className="text-sm text-gray-600 mt-1">「Edit」ボタンを押すと、左に原本、右に入力フォームが表示されます。見比べながらサクサク修正。</p>
+                                    <h3 className="font-bold text-gray-800 dark:text-gray-100">2. 比較しながら編集 (Split View)</h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">「Edit」ボタンを押すと、左に原本、右に入力フォームが表示されます。見比べながらサクサク修正。</p>
                                 </div>
                             </div>
                             <div className="flex gap-4">
-                                <div className="p-3 bg-green-100 text-green-600 rounded-lg h-fit"><Download className="w-6 h-6" /></div>
+                                <div className="p-3 bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 rounded-lg h-fit"><Download className="w-6 h-6" /></div>
                                 <div>
-                                    <h3 className="font-bold text-gray-800">3. データのエクスポート</h3>
-                                    <p className="text-sm text-gray-600 mt-1">CSVまたはExcel形式で出力。データはブラウザに自動保存されるので、閉じても安心です。</p>
+                                    <h3 className="font-bold text-gray-800 dark:text-gray-100">3. データのエクスポート</h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">CSVまたはExcel形式で出力。データはブラウザに自動保存されるので、閉じても安心です。</p>
                                 </div>
                             </div>
                         </div>
                     )}
                     {activeHelpTab === 'shortcuts' && (
                         <div className="grid grid-cols-1 gap-4">
-                            <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg border border-gray-100">
-                                <span className="font-medium text-gray-700">保存して閉じる</span>
+                            <div className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                                <span className="font-medium text-gray-700 dark:text-gray-300">保存して閉じる</span>
                                 <div className="flex gap-2">
-                                    <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-500 font-mono shadow-sm">Ctrl</kbd>
+                                    <kbd className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-300 font-mono shadow-sm">Ctrl</kbd>
                                     <span className="text-gray-300">+</span>
-                                    <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-500 font-mono shadow-sm">Enter</kbd>
+                                    <kbd className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-300 font-mono shadow-sm">Enter</kbd>
                                 </div>
                             </div>
-                            <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg border border-gray-100">
-                                <span className="font-medium text-gray-700">キャンセル</span>
+                            <div className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                                <span className="font-medium text-gray-700 dark:text-gray-300">前のデータへ</span>
                                 <div className="flex gap-2">
-                                    <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-500 font-mono shadow-sm">Esc</kbd>
+                                    <kbd className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-300 font-mono shadow-sm">Alt</kbd>
+                                    <span className="text-gray-300">+</span>
+                                    <kbd className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-300 font-mono shadow-sm">←/↑</kbd>
+                                    <span className="text-gray-300 text-xs self-center mx-1">or</span>
+                                    <kbd className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-300 font-mono shadow-sm">PageUp</kbd>
+                                </div>
+                            </div>
+                            <div className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                                <span className="font-medium text-gray-700 dark:text-gray-300">次のデータへ</span>
+                                <div className="flex gap-2">
+                                    <kbd className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-300 font-mono shadow-sm">Alt</kbd>
+                                    <span className="text-gray-300">+</span>
+                                    <kbd className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-300 font-mono shadow-sm">→/↓</kbd>
+                                    <span className="text-gray-300 text-xs self-center mx-1">or</span>
+                                    <kbd className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-300 font-mono shadow-sm">PageDown</kbd>
+                                </div>
+                            </div>
+                            <div className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                                <span className="font-medium text-gray-700 dark:text-gray-300">キャンセル</span>
+                                <div className="flex gap-2">
+                                    <kbd className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs text-gray-500 dark:text-gray-300 font-mono shadow-sm">Esc</kbd>
                                 </div>
                             </div>
                         </div>
                     )}
                     {activeHelpTab === 'faq' && (
                         <div className="space-y-4">
-                            <details className="group p-4 bg-gray-50 rounded-lg open:bg-blue-50 transition-colors">
-                                <summary className="font-bold text-gray-700 cursor-pointer list-none flex justify-between items-center">
+                            <details className="group p-4 bg-gray-50 dark:bg-gray-800 rounded-lg open:bg-blue-50 dark:open:bg-gray-800 transition-colors">
+                                <summary className="font-bold text-gray-700 dark:text-gray-300 cursor-pointer list-none flex justify-between items-center">
                                     データが消えた！
                                     <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
                                 </summary>
-                                <p className="text-sm text-gray-600 mt-2 ml-2">ブラウザのLocalStorageに保存されています。ページを再読み込みしても残っていますが、「CLEAR」ボタンを押すと完全に消去されます。</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 ml-2">ブラウザのLocalStorageに保存されています。ページを再読み込みしても残っていますが、「CLEAR」ボタンを押すと完全に消去されます。</p>
                             </details>
-                            <details className="group p-4 bg-gray-50 rounded-lg open:bg-blue-50 transition-colors">
-                                <summary className="font-bold text-gray-700 cursor-pointer list-none flex justify-between items-center">
+                            <details className="group p-4 bg-gray-50 dark:bg-gray-800 rounded-lg open:bg-blue-50 dark:open:bg-gray-800 transition-colors">
+                                <summary className="font-bold text-gray-700 dark:text-gray-300 cursor-pointer list-none flex justify-between items-center">
                                     読み取り精度が低い
                                     <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
                                 </summary>
-                                <p className="text-sm text-gray-600 mt-2 ml-2">画質が低い場合や、手書き文字が崩れている場合に発生します。高解像度の画像をお試しください。</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 ml-2">画質が低い場合や、手書き文字が崩れている場合に発生します。高解像度の画像をお試しください。</p>
                             </details>
                         </div>
                     )}
@@ -383,13 +475,13 @@ export default function Home() {
     );
 
     const TimerDisplay = () => (
-        <div className={`fixed bottom-8 right-8 bg-white border border-gray-200 shadow-xl rounded-full px-6 py-3 flex items-center gap-3 transition-all transform ${loading || elapsedTime > 0 ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
+        <div className={`fixed bottom-8 right-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xl rounded-full px-6 py-3 flex items-center gap-3 transition-all transform ${loading || elapsedTime > 0 ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
             <div className={`relative flex items-center justify-center ${loading ? 'animate-pulse' : ''}`}>
-                <Clock className={`w-5 h-5 ${loading ? 'text-blue-500' : 'text-gray-400'}`} />
+                <Clock className={`w-5 h-5 ${loading ? 'text-blue-500' : 'text-gray-400 dark:text-gray-500'}`} />
             </div>
             <div className="flex flex-col">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Processing Time</span>
-                <span className={`text-xl font-mono font-medium ${loading ? 'text-blue-600' : 'text-gray-700'}`}>
+                <span className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Processing Time</span>
+                <span className={`text-xl font-mono font-medium ${loading ? 'text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-200'}`}>
                     {elapsedTime.toFixed(1)}s
                 </span>
             </div>
@@ -404,10 +496,10 @@ export default function Home() {
             {/* Split View Overlay */}
             {editingIndex !== null && editFormData && (
                 <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-white w-full h-[90vh] max-w-7xl rounded-xl shadow-2xl flex overflow-hidden">
+                    <div className="bg-white dark:bg-gray-900 w-full h-[90vh] max-w-7xl rounded-xl shadow-2xl flex overflow-hidden border border-gray-200 dark:border-gray-800">
                         {/* Left: Source Preview */}
-                        <div className="w-1/2 bg-gray-100 border-r border-gray-200 relative">
-                            <div className="absolute top-4 left-4 z-10 bg-white/80 px-3 py-1 rounded text-xs font-bold shadow-sm">
+                        <div className="w-1/2 bg-gray-100 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 relative">
+                            <div className="absolute top-4 left-4 z-10 bg-white/80 dark:bg-black/80 dark:text-gray-200 px-3 py-1 rounded text-xs font-bold shadow-sm">
                                 ORIGINAL FILE
                             </div>
                             {editFormData._sourceUrl ? (
@@ -426,36 +518,36 @@ export default function Home() {
                         </div>
 
                         {/* Right: Edit Form */}
-                        <div className="w-1/2 flex flex-col">
-                            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                        <div className="w-1/2 flex flex-col bg-white dark:bg-gray-900">
+                            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800">
                                 <div>
-                                    <h3 className="font-bold text-lg flex items-center gap-2">
+                                    <h3 className="font-bold text-lg flex items-center gap-2 text-gray-800 dark:text-gray-100">
                                         <Edit className="w-5 h-5" /> Edit Data
                                     </h3>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <div className="flex items-center bg-gray-100 rounded-lg p-1 mr-4">
+                                    <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1 mr-4">
                                         <button
                                             onClick={() => handleNavigate('prev')}
                                             disabled={editingIndex === 0}
-                                            className="p-1 text-gray-600 hover:text-blue-600 hover:bg-white rounded disabled:opacity-30 disabled:hover:bg-transparent"
-                                            title="Previous (Alt + ↑)"
+                                            className="p-1 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-gray-600 rounded disabled:opacity-30 disabled:hover:bg-transparent"
+                                            title="Previous (Alt + ↑ / PgUp)"
                                         >
                                             <ChevronLeft className="w-5 h-5" />
                                         </button>
-                                        <span className="text-xs font-mono text-gray-500 px-2 min-w-[60px] text-center">
+                                        <span className="text-xs font-mono text-gray-500 dark:text-gray-400 px-2 min-w-[60px] text-center">
                                             {editingIndex! + 1} / {data.length}
                                         </span>
                                         <button
                                             onClick={() => handleNavigate('next')}
                                             disabled={editingIndex === data.length - 1}
-                                            className="p-1 text-gray-600 hover:text-blue-600 hover:bg-white rounded disabled:opacity-30 disabled:hover:bg-transparent"
-                                            title="Next (Alt + ↓)"
+                                            className="p-1 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-gray-600 rounded disabled:opacity-30 disabled:hover:bg-transparent"
+                                            title="Next (Alt + ↓ / PgDn)"
                                         >
                                             <ChevronRight className="w-5 h-5" />
                                         </button>
                                     </div>
-                                    <button onClick={handleCancelClick} className="text-gray-400 hover:text-gray-600">
+                                    <button onClick={handleCancelClick} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                                         <X className="w-6 h-6" />
                                     </button>
                                 </div>
@@ -464,9 +556,9 @@ export default function Home() {
                             <div className="flex-1 overflow-y-auto p-8 space-y-6">
                                 <div className="grid grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Name</label>
+                                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</label>
                                         <input
-                                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                            className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                             value={editFormData.name}
                                             onChange={(e) => handleInputChange(e, 'name')}
                                             placeholder="Name"
@@ -474,40 +566,40 @@ export default function Home() {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Furigana</label>
+                                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Furigana</label>
                                         <input
-                                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                            className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                             value={editFormData.furigana}
                                             onChange={(e) => handleInputChange(e, 'furigana')}
                                             placeholder="Furigana"
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Gender</label>
+                                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Gender</label>
                                         <input
-                                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                            className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                             value={editFormData.gender}
                                             onChange={(e) => handleInputChange(e, 'gender')}
                                             placeholder="Gender"
                                         />
                                     </div>
                                     <div className="space-y-2 col-span-2">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Date of Birth</label>
+                                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date of Birth</label>
                                         <div className="flex gap-2">
                                             <input
-                                                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                                 value={editFormData.dobYear}
                                                 onChange={(e) => handleInputChange(e, 'dobYear')}
                                                 placeholder="Year"
                                             />
                                             <input
-                                                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                                 value={editFormData.dobMonth}
                                                 onChange={(e) => handleInputChange(e, 'dobMonth')}
                                                 placeholder="Month"
                                             />
                                             <input
-                                                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                                 value={editFormData.dobDay}
                                                 onChange={(e) => handleInputChange(e, 'dobDay')}
                                                 placeholder="Day"
@@ -515,18 +607,18 @@ export default function Home() {
                                         </div>
                                     </div>
                                     <div className="col-span-2 space-y-2">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Address</label>
+                                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Address</label>
                                         <input
-                                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                            className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                             value={editFormData.address}
                                             onChange={(e) => handleInputChange(e, 'address')}
                                             placeholder="Address"
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Postal Code</label>
+                                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Postal Code</label>
                                         <input
-                                            className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${!editFormData.postalCode ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                                            className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${!editFormData.postalCode ? 'border-red-300 bg-red-50 dark:bg-red-900/20 dark:border-red-800' : 'border-gray-200 dark:border-gray-700'}`}
                                             value={editFormData.postalCode}
                                             onChange={(e) => handleInputChange(e, 'postalCode')}
                                             placeholder="000-0000"
@@ -534,27 +626,27 @@ export default function Home() {
                                         {!editFormData.postalCode && <p className="text-xs text-red-500">Required</p>}
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Phone</label>
+                                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Phone</label>
                                         <input
-                                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                            className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                             value={editFormData.phone}
                                             onChange={(e) => handleInputChange(e, 'phone')}
                                             placeholder="090-0000-0000"
                                         />
                                     </div>
                                     <div className="col-span-2 space-y-2">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Occupation</label>
+                                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Occupation</label>
                                         <input
-                                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                            className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                             value={editFormData.occupation}
                                             onChange={(e) => handleInputChange(e, 'occupation')}
                                             placeholder="Occupation"
                                         />
                                     </div>
                                     <div className="col-span-2 space-y-2">
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Card Number (8 digits)</label>
+                                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Card Number (8 digits)</label>
                                         <input
-                                            className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                                            className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                             value={editFormData.cardNumber || ''}
                                             onChange={(e) => handleInputChange(e, 'cardNumber')}
                                             placeholder="12345678"
@@ -563,16 +655,16 @@ export default function Home() {
                                 </div>
                             </div>
 
-                            <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+                            <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800 flex justify-end gap-3">
                                 <button
                                     onClick={handleCancelClick}
-                                    className="px-6 py-3 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition-colors"
+                                    className="px-6 py-3 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={() => handleSaveClick(editingIndex!)}
-                                    className="px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center gap-2"
+                                    className="px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-blue-900/50 transition-all flex items-center gap-2"
                                 >
                                     <Save className="w-4 h-4" /> Save Changes
                                 </button>
@@ -583,19 +675,28 @@ export default function Home() {
             )
             }
 
-            <div className="max-w-7xl mx-auto space-y-12">
+            <div className="max-w-7xl mx-auto space-y-8">
                 {/* Header */}
-                <header className="space-y-6 pt-8 relative">
-                    <h1 className="text-3xl font-light tracking-wider text-center text-gray-800">
-                        サプリCSVセンター <span className="text-xs font-bold bg-gray-900 text-white px-2 py-1 rounded ml-2">ULTIMATE</span>
+                <header className="flex justify-between items-center py-6 border-b border-gray-100 dark:border-gray-800">
+                    <h1 className="text-2xl font-light tracking-wider text-gray-800 dark:text-gray-100">
+                        サプリCSVセンター <span className="text-xs font-bold bg-gray-900 dark:bg-blue-600 text-white px-2 py-1 rounded ml-2">ULTIMATE</span>
                     </h1>
-                    <button
-                        onClick={() => setShowHelp(true)}
-                        className="absolute right-0 top-8 flex items-center gap-2 text-gray-400 hover:text-blue-600 transition-colors"
-                    >
-                        <HelpCircle className="w-6 h-6" />
-                        <span className="text-sm font-medium hidden md:inline">使い方ガイド</span>
-                    </button>
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={toggleDarkMode}
+                            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            title="Toggle Theme"
+                        >
+                            {isDarkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-gray-600 dark:text-gray-400" />}
+                        </button>
+                        <button
+                            onClick={() => setShowHelp(true)}
+                            className="flex items-center gap-2 text-gray-400 hover:text-blue-600 dark:text-gray-500 dark:hover:text-blue-400 transition-colors"
+                        >
+                            <HelpCircle className="w-6 h-6" />
+                            <span className="text-sm font-medium hidden md:inline">使い方ガイド</span>
+                        </button>
+                    </div>
                 </header>
 
                 {/* Upload Area */}
@@ -604,7 +705,7 @@ export default function Home() {
                     onDragOver={handleDragOver}
                     onDrop={handleDrop}
                 >
-                    <div className="relative bg-white rounded-xl p-16 text-center border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 transition-all duration-300">
+                    <div className="relative bg-white dark:bg-gray-800 rounded-xl p-16 text-center border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-700/50 transition-all duration-300">
                         <input
                             type="file"
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
@@ -617,7 +718,7 @@ export default function Home() {
                                 {loading ? <Loader2 className="w-10 h-10 animate-spin text-blue-500" /> : <Upload className="w-10 h-10" />}
                             </div>
                             <div>
-                                <p className="text-xl font-medium text-gray-700 tracking-wide">
+                                <p className="text-xl font-medium text-gray-700 dark:text-gray-200 tracking-wide">
                                     Drop files here (PDF/Images)
                                 </p>
                                 <p className="text-sm text-gray-400 mt-2">
@@ -631,11 +732,25 @@ export default function Home() {
                 {/* Data Display */}
                 {data.length > 0 && (
                     <div className="space-y-6 animate-in fade-in duration-700">
-                        <div className="flex items-center justify-between border-b border-gray-200 pb-4">
-                            <h2 className="text-lg font-medium tracking-wide flex items-center gap-3 text-gray-700">
-                                <FileText className="w-5 h-5 text-gray-400" />
-                                {data.length} Records Extracted
-                            </h2>
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 dark:border-gray-800 pb-4">
+                            <div className="flex items-center gap-4">
+                                <h2 className="text-lg font-medium tracking-wide flex items-center gap-3 text-gray-700 dark:text-gray-200">
+                                    <FileText className="w-5 h-5 text-gray-400" />
+                                    {filteredData.length} / {data.length} Records
+                                </h2>
+                                {/* Search Bar */}
+                                <div className="relative group">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-transparent focus:bg-white dark:focus:bg-gray-900 focus:border-blue-500 dark:focus:border-blue-500 rounded-lg outline-none text-sm transition-all w-48 focus:w-64"
+                                    />
+                                </div>
+                            </div>
+
                             <div className="flex gap-3">
                                 <button
                                     onClick={clearAllData}
@@ -651,24 +766,24 @@ export default function Home() {
                                 </button>
                                 <button
                                     onClick={downloadCSV}
-                                    className="flex items-center gap-2 bg-gray-900 hover:bg-gray-700 text-white px-5 py-2 rounded shadow-sm hover:shadow-md text-xs font-bold tracking-widest transition-all"
+                                    className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-5 py-2 rounded shadow-sm hover:shadow-md text-xs font-bold tracking-widest transition-all"
                                 >
                                     <Download className="w-3 h-3" /> CSV
                                 </button>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left text-sm whitespace-nowrap">
-                                    <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
+                                    <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
                                         <tr>
                                             <th className="p-4 font-semibold w-10">#</th>
                                             <th className="p-4 font-semibold w-32">ACTION</th>
-                                            <th onClick={() => handleSort('cardNumber')} className="p-4 font-semibold cursor-pointer hover:bg-gray-100 transition-colors group">
+                                            <th onClick={() => handleSort('cardNumber')} className="p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group">
                                                 CARD NO {sortConfig?.key === 'cardNumber' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                                             </th>
-                                            <th onClick={() => handleSort('name')} className="p-4 font-semibold cursor-pointer hover:bg-gray-100 transition-colors">NAME {sortConfig?.key === 'name' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
+                                            <th onClick={() => handleSort('name')} className="p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">NAME {sortConfig?.key === 'name' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
                                             <th className="p-4 font-semibold">FURIGANA</th>
                                             <th className="p-4 font-semibold">GENDER</th>
                                             <th className="p-4 font-semibold">YEAR</th>
@@ -680,44 +795,53 @@ export default function Home() {
                                             <th className="p-4 font-semibold">OCCUPATION</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {sortedData.map((row, i) => (
-                                            <tr key={i} className="hover:bg-blue-50/50 transition-colors">
-                                                <td className="p-4 text-gray-400 text-xs">{i + 1}</td>
-                                                <td className="p-4">
-                                                    <div className="flex gap-2">
-                                                        <button
-                                                            onClick={() => handleEditClick(i, row)}
-                                                            className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                                                            title="Edit"
-                                                        >
-                                                            <Edit className="w-4 h-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteClick(i)}
-                                                            className="p-1 text-red-400 hover:bg-red-100 rounded transition-colors"
-                                                            title="Delete"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                                <td className="p-4 font-mono font-bold text-blue-600">{row.cardNumber || '-'}</td>
-                                                <td className="p-4 font-medium text-gray-900">{row.name}</td>
-                                                <td className="p-4 text-gray-600">{row.furigana}</td>
-                                                <td className="p-4 text-gray-600 font-mono text-center">{row.gender}</td>
-                                                <td className="p-4 text-gray-600 font-mono">{row.dobYear}</td>
-                                                <td className="p-4 text-gray-600 font-mono">{row.dobMonth}</td>
-                                                <td className="p-4 text-gray-600 font-mono">{row.dobDay}</td>
-                                                <td className={`p-4 ${!row.postalCode ? 'text-red-400 italic' : 'text-gray-600'}`}>
-                                                    {row.postalCode || 'Missing'}
-                                                </td>
-                                                <td className="p-4 text-gray-600">{row.address}</td>
-                                                <td className="p-4 text-gray-600">{row.phone}</td>
-                                                <td className="p-4 text-gray-600">{row.occupation}</td>
-                                            </tr>
-                                        ))}
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                        {filteredData.map((row, i) => {
+                                            const isDuplicate = duplicates.has(row.cardNumber);
+                                            return (
+                                                <tr key={i} className="hover:bg-blue-50/50 dark:hover:bg-gray-800 transition-colors">
+                                                    <td className="p-4 text-gray-400 dark:text-gray-600 text-xs">{i + 1}</td>
+                                                    <td className="p-4">
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => handleEditClick(i, row)}
+                                                                className="p-1 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900 rounded transition-colors"
+                                                                title="Edit"
+                                                            >
+                                                                <Edit className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteClick(i)}
+                                                                className="p-1 text-red-400 hover:bg-red-100 dark:hover:bg-red-900 rounded transition-colors"
+                                                                title="Delete"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <div className={`font-mono font-bold flex items-center gap-2 ${isDuplicate ? 'text-red-500' : 'text-blue-600 dark:text-blue-400'}`}>
+                                                            {row.cardNumber || '-'}
+                                                            {isDuplicate && <span title="Duplicate Card Number"><AlertTriangle className="w-4 h-4 text-red-500" /></span>}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4 font-medium text-gray-900 dark:text-gray-200">{row.name}</td>
+                                                    <td className="p-4 text-gray-600 dark:text-gray-400">{row.furigana}</td>
+                                                    <td className="p-4 text-gray-600 dark:text-gray-400 font-mono text-center">{row.gender}</td>
+                                                    <td className="p-4 text-gray-600 dark:text-gray-400 font-mono">{row.dobYear}</td>
+                                                    <td className="p-4 text-gray-600 dark:text-gray-400 font-mono">{row.dobMonth}</td>
+                                                    <td className="p-4 text-gray-600 dark:text-gray-400 font-mono">{row.dobDay}</td>
+                                                    <td className={`p-4 ${!row.postalCode ? 'text-red-400 italic' : 'text-gray-600 dark:text-gray-400'}`}>
+                                                        {row.postalCode || 'Missing'}
+                                                    </td>
+                                                    <td className="p-4 text-gray-600 dark:text-gray-400">{row.address}</td>
+                                                    <td className="p-4 text-gray-600 dark:text-gray-400">{row.phone}</td>
+                                                    <td className="p-4 text-gray-600 dark:text-gray-400">{row.occupation}</td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
+
                                 </table>
                             </div>
                         </div>
