@@ -250,11 +250,11 @@ export default function Home() {
         if (match) {
             return {
                 addr1: match[1],
-                addr2: match[2].trim(),
-                addr3: "" // Manual entry or complex parsing needed for addr3
+                addr2: "", // User requested to skip addr2
+                addr3: match[2].trim() // Move detail to addr3
             };
         }
-        return { addr1: "", addr2: address, addr3: "" };
+        return { addr1: "", addr2: "", addr3: address };
     };
 
     const formatPhone = (phone: string) => {
