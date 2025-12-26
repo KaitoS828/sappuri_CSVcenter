@@ -239,56 +239,267 @@ export default function Home() {
         return { ...item, phone };
     };
 
-    const downloadCSV = () => {
-        if (filteredData.length === 0) return;
+    const getEraDate = (yearStr: string, monthStr: string, dayStr: string) => {
+        // Force Seireki (Western Calendar) per user request
+        return { code: "0", year: yearStr, month: monthStr, day: dayStr };
+    };
 
-        const headers = ["Card No", "Name", "Furigana", "Gender", "DOB Year", "DOB Month", "DOB Day", "Postal Code", "Address", "Phone", "Occupation"];
+    const splitAddress = (address: string) => {
+        // Simple regex for prefecture
+        const match = address.match(/^(.+?[都道府県])(.+)$/);
+        if (match) {
+            return {
+                addr1: match[1],
+                addr2: match[2].trim(),
+                addr3: "" // Manual entry or complex parsing needed for addr3
+            };
+        }
+        return { addr1: "", addr2: address, addr3: "" };
+    };
+
+    const formatPhone = (phone: string) => {
+        if (!phone) return "";
+        const cleaned = phone.replace(/[- ]/g, ''); // Remove existing separators
+        
+        // Special rule for Toyokoro/Hiroo area (01558)
+        // If it starts with 01558 and has 10 digits (e.g. 0155820000 -> 01558-2-0000)
+        if (cleaned.startsWith('01558') && cleaned.length === 10) {
+            return `${cleaned.slice(0, 5)}-${cleaned.slice(5, 6)}-${cleaned.slice(6)}`;
+        }
+        
+        // Return original if no special rule matches (preserves existing valid formats)
+        // Or if the input already had hyphens, we might want to keep them if they don't match our rule.
+        // However, cleaned removes them. Let's return the original `phone` if it doesn't match our rule,
+        // so we don't accidentally strip hyphens from other valid numbers extracted by AI.
+        return phone;
+    };
+
+    const generateExportData = (sourceData: ExtractedData[]): any[] => {
+        const fullList: any[] = [];
+        const sourceMap = new Map<string, ExtractedData>();
+
+        sourceData.forEach(item => {
+            if (item.cardNumber && !sourceMap.has(item.cardNumber)) {
+                sourceMap.set(item.cardNumber, item);
+            }
+        });
+
+        for (let i = 1; i <= 2000; i++) {
+            const cardNumber = i.toString().padStart(8, '0');
+            const found = sourceMap.get(cardNumber);
+
+            if (found) {
+                const era = getEraDate(found.dobYear, found.dobMonth, found.dobDay);
+                const addr = splitAddress(found.address);
+
+                fullList.push({
+                    cardNumber: found.cardNumber,
+                    furigana: found.furigana,
+                    name: found.name,
+                    dobEraCode: era.code,
+                    dobEraYear: era.year,
+                    dobMonth: found.dobMonth,
+                    dobDay: found.dobDay,
+                    gender: found.gender,
+                    occupation: found.occupation,
+                    postalCode: found.postalCode,
+                    addr1: addr.addr1,
+                    addr2: addr.addr2,
+                    addr3: addr.addr3,
+                    phone: formatPhone(found.phone),
+                    fax: "",
+                    mobile: "",
+                    // New columns
+                    homeEmail: "",
+                    mobileMail: "",
+                    homeDistrictCode: "",
+                    workPostal: "",
+                    workAddr1: "",
+                    workAddr2: "",
+                    workAddr3: "",
+                    workCompany: "",
+                    workDept: "",
+                    workPhone: "",
+                    workFax: "",
+                    workMobile: "",
+                    workEmail: "",
+                    workMobileMail: "",
+                    workDistrictCode: ""
+                });
+            } else {
+                fullList.push({
+                    cardNumber: cardNumber,
+                    furigana: "",
+                    name: "",
+                    dobEraCode: "",
+                    dobEraYear: "",
+                    dobMonth: "",
+                    dobDay: "",
+                    gender: "",
+                    occupation: "",
+                    postalCode: "",
+                    addr1: "",
+                    addr2: "",
+                    addr3: "",
+                    phone: "",
+                    fax: "",
+                    mobile: "",
+                    homeEmail: "",
+                    mobileMail: "",
+                    homeDistrictCode: "",
+                    workPostal: "",
+                    workAddr1: "",
+                    workAddr2: "",
+                    workAddr3: "",
+                    workCompany: "",
+                    workDept: "",
+                    workPhone: "",
+                    workFax: "",
+                    workMobile: "",
+                    workEmail: "",
+                    workMobileMail: "",
+                    workDistrictCode: ""
+                });
+            }
+        }
+        return fullList;
+    };
+
+    const downloadBlob = (blob: Blob, filename: string) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        
+        setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }, 100);
+    };
+
+    const downloadCSV = () => {
+        const exportList = generateExportData(data);
+        if (exportList.length === 0) return;
+
+        const headers = [
+            "会員番号", "フリガナ", "お名前",
+            "生年月日元号", "生年月日(年)", "生年月日(月)", "生年月日(日)",
+            "性別", "ご職業",
+            "ご自宅郵便番号", "ご自宅住所1", "ご自宅住所2", "ご自宅住所3",
+            "ご自宅電話番号", "ご自宅FAX番号", "ご自宅携帯番号",
+            "ご自宅E-Mail", "ご自宅携帯Mail", "ご自宅地区コード",
+            "お勤め先郵便番号", "お勤め先住所1", "お勤め先住所2", "お勤め先住所3",
+            "お勤め先会社名", "お勤め先部署名", "お勤め先電話番号", "お勤め先FAX番号", "お勤め先携帯番号",
+            "お勤め先E-Mail", "お勤め先携帯Mail", "お勤め先地区コード"
+        ];
+
         const csvContent = [
             headers.join(","),
-            ...filteredData.map(row => [
-                `"${row.cardNumber || ''}"`,
-                `"${row.name}"`,
+            ...exportList.map(row => [
+                `"${row.cardNumber}"`,
                 `"${row.furigana}"`,
-                `"${row.gender}"`,
-                `"${row.dobYear}"`,
+                `"${row.name}"`,
+                `"${row.dobEraCode}"`,
+                `"${row.dobEraYear}"`,
                 `"${row.dobMonth}"`,
                 `"${row.dobDay}"`,
+                `"${row.gender}"`,
+                `"${row.occupation}"`,
                 `"${row.postalCode}"`,
-                `"${row.address}"`,
+                `"${row.addr1}"`,
+                `"${row.addr2}"`,
+                `"${row.addr3}"`,
                 `"${row.phone}"`,
-                `"${row.occupation}"`
+                `"${row.fax}"`,
+                `"${row.mobile}"`,
+                `"${row.homeEmail}"`,
+                `"${row.mobileMail}"`,
+                `"${row.homeDistrictCode}"`,
+                `"${row.workPostal}"`,
+                `"${row.workAddr1}"`,
+                `"${row.workAddr2}"`,
+                `"${row.workAddr3}"`,
+                `"${row.workCompany}"`,
+                `"${row.workDept}"`,
+                `"${row.workPhone}"`,
+                `"${row.workFax}"`,
+                `"${row.workMobile}"`,
+                `"${row.workEmail}"`,
+                `"${row.workMobileMail}"`,
+                `"${row.workDistrictCode}"`
             ].join(","))
         ].join("\n");
 
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        if (link.download !== undefined) {
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', 'extracted_data.csv');
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
+        // Add BOM for Excel compatibility
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8' });
+        downloadBlob(blob, 'extracted_data.csv');
     };
 
     const downloadExcel = () => {
-        if (filteredData.length === 0) return;
-        const exportData = filteredData.map(({ _sourceUrl, _sourceType, ...rest }) => rest);
+        const exportList = generateExportData(data);
+        if (exportList.length === 0) return;
+
+        const exportData = exportList.map(row => ({
+            "会員番号": row.cardNumber,
+            "フリガナ": row.furigana,
+            "お名前": row.name,
+            "生年月日元号": row.dobEraCode,
+            "生年月日(年)": row.dobEraYear,
+            "生年月日(月)": row.dobMonth,
+            "生年月日(日)": row.dobDay,
+            "性別": row.gender,
+            "ご職業": row.occupation,
+            "ご自宅郵便番号": row.postalCode,
+            "ご自宅住所1": row.addr1,
+            "ご自宅住所2": row.addr2,
+            "ご自宅住所3": row.addr3,
+            "ご自宅電話番号": row.phone,
+            "ご自宅FAX番号": row.fax,
+            "ご自宅携帯番号": row.mobile,
+            "ご自宅E-Mail": row.homeEmail,
+            "ご自宅携帯Mail": row.mobileMail,
+            "ご自宅地区コード": row.homeDistrictCode,
+            "お勤め先郵便番号": row.workPostal,
+            "お勤め先住所1": row.workAddr1,
+            "お勤め先住所2": row.workAddr2,
+            "お勤め先住所3": row.workAddr3,
+            "お勤め先会社名": row.workCompany,
+            "お勤め先部署名": row.workDept,
+            "お勤め先電話番号": row.workPhone,
+            "お勤め先FAX番号": row.workFax,
+            "お勤め先携帯番号": row.workMobile,
+            "お勤め先E-Mail": row.workEmail,
+            "お勤め先携帯Mail": row.workMobileMail,
+            "お勤め先地区コード": row.workDistrictCode
+        }));
+
         const worksheet = XLSX.utils.json_to_sheet(exportData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Applications");
-        XLSX.writeFile(workbook, "extracted_data.xlsx");
+        
+        // Use proper MIME type for .xlsx
+        const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        downloadBlob(blob, 'extracted_data.xlsx');
     };
 
-    const clearAllData = () => {
-        if (confirm("全てのデータを削除しますか？")) {
+    const [isConfirmingClear, setIsConfirmingClear] = useState(false);
+
+    const handleClearClick = () => {
+        if (isConfirmingClear) {
             setData([]);
             localStorage.removeItem("supplement-csv-data");
             setElapsedTime(0);
+            setIsConfirmingClear(false);
+        } else {
+            setIsConfirmingClear(true);
+            setTimeout(() => setIsConfirmingClear(false), 3000);
         }
     };
+
 
     const handleEditClick = (index: number, row: ExtractedData) => {
         setEditingIndex(index);
@@ -753,10 +964,11 @@ export default function Home() {
 
                             <div className="flex gap-3">
                                 <button
-                                    onClick={clearAllData}
-                                    className="flex items-center gap-2 text-gray-400 hover:text-red-500 px-4 py-2 text-xs font-bold tracking-widest transition-colors"
+                                    onClick={handleClearClick}
+                                    className={`flex items-center gap-2 px-4 py-2 text-xs font-bold tracking-widest transition-all rounded ${isConfirmingClear ? 'bg-red-600 text-white hover:bg-red-700' : 'text-gray-400 hover:text-red-500'}`}
                                 >
-                                    <Trash2 className="w-3 h-3" /> CLEAR
+                                    {isConfirmingClear ? <AlertTriangle className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
+                                    {isConfirmingClear ? "SURE?" : "CLEAR"}
                                 </button>
                                 <button
                                     onClick={downloadExcel}
